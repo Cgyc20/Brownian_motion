@@ -1,0 +1,2 @@
+Inside your conda environment do
+pip install particles[extra]
