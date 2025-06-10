@@ -5,7 +5,7 @@ from matplotlib.animation import FuncAnimation
 number_of_particles = 10
 timesteps = 1000
 dt = 0.01  # time step size
-diffusion_coefficient = 0.001
+diffusion_coefficient = 0.005
 
 X_start, X_end = 0, 1
 Y_start = 0
