@@ -12,8 +12,9 @@ Y_start = 0
 Y_end = 1
 
 positions = np.zeros((number_of_particles, 2, timesteps + 1))
-positions[:, 0, 0] = 0.5  # x
-positions[:, 1, 0] = 0.5  # y
+for i in range(number_of_particles):
+    positions[i, 0, 0] = np.random.uniform(X_start,X_end)  # x
+    positions[i, 1, 0] = np.random.uniform(Y_start,Y_end)  # y
 
 for t in range(1, timesteps + 1):
     steps = np.sqrt(2 * diffusion_coefficient * dt) * np.random.randn(number_of_particles, 2)
