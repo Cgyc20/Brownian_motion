@@ -41,3 +41,22 @@ def update(frame):
 
 ani = FuncAnimation(fig, update, frames=timesteps+1, interval=20, blit=True)
 plt.show()
+
+#intensity evolution over time
+times = np.linspace(0, timesteps * dt, timesteps + 1)
+def intensity_simple(pos):
+    #pos is an array of positions over time
+    intensity = np.zeros(timesteps + 1)
+    intensity_close = 1 # intensity at y=0
+    for t in range(timesteps + 1):
+        intensity[t] = (intensity_close) / (1+pos[0, 1, t]**2)
+    return intensity
+
+intensity = intensity_simple(positions)
+
+plt.plot(times, intensity)
+plt.xlabel('Time (s)')
+plt.ylabel('Intensity')
+plt.title('Intensity Evolution Over Time')
+plt.xlim(0, timesteps * dt)
+plt.show()
