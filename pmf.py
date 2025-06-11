@@ -156,3 +156,37 @@ psf_at_center = gaussian_psf(0, 0, b_example, s)
 print(f"\nExample: PSF intensity at center (0,0) for z = {z_example:.1f} mm: {psf_at_center:.4e}")
 print(f"Corresponding Circle of Confusion (b) = {b_example:.2f} mm")
 
+
+from scipy.signal import convolve2d
+
+def create_circle_particle(size=9, radius=3):
+    img = np.zeros((size, size))
+    cx, cy = size // 2, size // 2
+    for x in range(size):
+        for y in range(size):
+            if (x - cx)**2 + (y - cy)**2 <= radius**2:
+                img[y, x] = 1.0
+    return img
+
+def gaussian_psf(size=9, sigma=1.5):
+    ax = np.arange(-size // 2 + 1., size // 2 + 1.)
+    xx, yy = np.meshgrid(ax, ax)
+    kernel = np.exp(-(xx**2 + yy**2) / (2. * sigma**2))
+    return kernel / np.sum(kernel)
+
+particle = create_circle_particle(size=9, radius=3)
+psf = gaussian_psf(size=9, sigma=2.0)
+
+blurred = convolve2d(particle, psf, mode='same', boundary='fill', fillvalue=0)
+
+plt.subplot(1,3,1)
+plt.title("Particle")
+plt.imshow(particle, cmap='gray')
+plt.subplot(1,3,2)
+plt.title("PSF")
+plt.imshow(psf, cmap='gray')
+plt.subplot(1,3,3)
+plt.title("Blurred")
+plt.imshow(blurred, cmap='gray')
+plt.tight_layout()
+plt.show()
