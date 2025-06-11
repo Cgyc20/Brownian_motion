@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.signal import fftconvolve
+#JC Branch :)
 
 # === Physical parameters ===
-wavelength = 100  # nm, light wavelength
+wavelength = 500  # nm, light wavelength
 NA = 1.4          # numerical aperture of objective
 refractive_index = 1.33  # water immersion objective (for axial scaling)
 n_medium = refractive_index
@@ -20,7 +21,7 @@ Z_start_nm, Z_end_nm = 0, box_size_nm
 number_of_particles = 10
 timesteps = 1000
 dt = 0.1  # time step, arbitrary units
-diffusion_coefficient = 100 # arbitrary units
+diffusion_coefficient = 10 # arbitrary units
 
 # Spatial grid parameters
 grid_size = 100  # pixels per axis
@@ -60,6 +61,57 @@ protein_mask = circular_protein_mask(protein_diameter_pix)
 
 # Initialize particle positions (in nm)
 positions = np.zeros((number_of_particles, 3, timesteps + 1))
+
+# Initialise light state (start at full light)
+light_state = np.zeros((number_of_particles, timesteps + 1))  
+light_state[:, 0] = 1  
+init_state = np.ones(number_of_particles)
+
+#Run Gillespie algorithm to simulate switching between light states
+t_after = 0
+t_now = 0
+switch_rate = 5 # switching rate
+propensity = switch_rate*number_of_particles
+
+light_now = np.copy(init_state)
+while t_now < timesteps * dt:
+    #Copy light state as a hold for current state
+    light_old = np.copy(light_now)
+
+    #Generate time to next event
+    tau = (1/propensity)*np.log(1/np.random.rand())
+
+    #Update time
+    t_now += tau
+
+    #choose random number to determine which particle switches
+    #Generate a random integer between 0 and number_of_particles - 1
+    particle_index = np.random.randint(0, number_of_particles)
+    if light_now[particle_index] == 1:
+        # If the particle is high intensity, quench
+        light_now[particle_index] = 0
+    else:
+        # If the particle is quenched, switch to high intensity
+        light_now[particle_index] = 1
+
+    # Calculate the times for recording
+    t_before = t_after
+    t_after = t_now
+
+    # Calculate the indices of the time step before and the current time
+    # step in terms of recording
+    ind_before = int(np.ceil((t_before + np.finfo(float).eps) / dt))
+    ind_after = min(int(np.floor(t_after / dt)), timesteps)
+
+    # Find out how many time-steps to write to
+    steps_to_write = ind_after - ind_before + 1
+    
+    if steps_to_write > 0 and steps_to_write != float('inf'):
+        light_state[:, ind_before:ind_after+ 1] = np.transpose(np.tile(light_old, (steps_to_write, 1)))
+
+#Save light state as txt file
+np.savetxt('light_state.txt', light_state, fmt='%.2f')
+
 for i in range(number_of_particles):
     positions[i, 0, 0] = np.random.uniform(0, box_size_nm)
     positions[i, 1, 0] = np.random.uniform(0, box_size_nm)
