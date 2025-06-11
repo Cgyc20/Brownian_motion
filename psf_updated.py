@@ -74,19 +74,12 @@ for t in range(1, timesteps + 1):
     positions[:, :, t] = positions[:, :, t-1] + steps   # scaled step size in nm
 
     # Reflect at boundaries
-    for dim in range(3):
-        min_bound = [X_start_nm, Y_start_nm, Z_start_nm][dim]
-        max_bound = [X_end_nm, Y_end_nm, Z_end_nm][dim]
-        positions[:, dim, t] = np.where(
-            positions[:, dim, t] < min_bound,
-            2 * min_bound - positions[:, dim, t],
-            positions[:, dim, t]
-        )
-        positions[:, dim, t] = np.where(
-            positions[:, dim, t] > max_bound,
-            2 * max_bound - positions[:, dim, t],
-            positions[:, dim, t]
-        )
+    positions[:, :, t] = positions[:, :, t-1] + steps
+    positions[:, 0, t] = np.where(positions[:, 0, t] < X_start_nm, np.abs(positions[:, 0, t]), positions[:, 0, t])
+    positions[:, 1, t] = np.where(positions[:, 1, t] < Y_start_nm, np.abs(positions[:, 1, t]), positions[:, 1, t])
+    positions[:, 0, t] = np.where(positions[:, 0, t] > X_end_nm, X_end_nm - (positions[:, 0, t] - X_end_nm), positions[:, 0, t])
+    positions[:, 1, t] = np.where(positions[:, 1, t] > Y_end_nm, Y_end_nm - (positions[:, 1, t] - Y_end_nm), positions[:, 1, t])
+
 
 # Gaussian PSF generator
 def gaussian_2d(size, sigma):
