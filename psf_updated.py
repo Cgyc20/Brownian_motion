@@ -19,8 +19,8 @@ Z_start_nm, Z_end_nm = 0, box_size_nm
 # === Simulation parameters ===
 number_of_particles = 10
 timesteps = 1000
-dt = 0.01  # time step, arbitrary units
-diffusion_coefficient = 20 # arbitrary units
+dt = 0.1  # time step, arbitrary units
+diffusion_coefficient = 100 # arbitrary units
 
 # Spatial grid parameters
 grid_size = 100  # pixels per axis
@@ -39,16 +39,16 @@ X, Y = np.meshgrid(x, y)
 z_focus_nm = box_size_nm / 2  # focal plane at center, 500 nm
 
 # Approximate lateral resolution (diffraction limited)
-lateral_resolution_nm = 0.4 * wavelength / NA  # sigma0 in nm
+lateral_resolution_nm = 0.21 * wavelength / NA  # sigma0 in nm
 
 # Compute sigma0 in pixels
 sigma0_pix = lateral_resolution_nm / pixel_size_nm
 
-sigma0_pix /= 2
-
+sigma0_pix /= 2 #Make the initial sigma slightly smaller
 # Rayleigh range z_R = (pi * n * sigma0^2) / wavelength
 z_R_nm = np.pi * n_medium * lateral_resolution_nm**2 / wavelength
 
+z_R_nm *= 4 #Make it a bit larger
 # --- Protein mask generation ---
 def circular_protein_mask(size):
     center = size // 2
@@ -66,13 +66,12 @@ for i in range(number_of_particles):
     positions[i, 2, 0] = np.random.uniform(0, box_size_nm)
 
 # Overwrite z-coordinate to keep the first particle at z = 500 nm (focal plane)
-positions[0, 2, :] = z_focus_nm
+positions[0, 2, :] = 500
 
 # Simulate Brownian motion with reflection at boundaries
 for t in range(1, timesteps + 1):
     steps = np.sqrt(2 * diffusion_coefficient * dt) * np.random.randn(number_of_particles, 3)
     positions[:, :, t] = positions[:, :, t-1] + steps   # scaled step size in nm
-
     # Reflect at boundaries
     positions[:, :, t] = positions[:, :, t-1] + steps
     positions[:, 0, t] = np.where(positions[:, 0, t] < X_start_nm, np.abs(positions[:, 0, t]), positions[:, 0, t])
@@ -122,9 +121,9 @@ for frame in range(timesteps + 1):
         cy_start = half - (y_pixel - y_start)
         cy_end = half + (y_end - y_pixel)
         depth = abs(z_nm - z_focus_nm)
-        intensity = 1 / (1 + (depth / (box_size_nm / 2))**2)
+        intensity = 1 / (1 + (depth / (box_size_nm*2)))
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
-    expected_photons_per_frame = 2000
+    expected_photons_per_frame = 200
     scaled_img = img * expected_photons_per_frame
     noisy_img = np.random.poisson(scaled_img).astype(float)
     frame_max = noisy_img.max()
@@ -170,7 +169,7 @@ def update(frame):
         depth = abs(z_nm - z_focus_nm)
         intensity = 1 / (1 + (depth / (box_size_nm / 2)))
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
-    expected_photons_per_frame = 2000
+    expected_photons_per_frame = 1000
     scaled_img = img * expected_photons_per_frame
     noisy_img = np.random.poisson(scaled_img).astype(float)
     # --- Global normalization ---
