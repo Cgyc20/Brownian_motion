@@ -4,7 +4,7 @@ from matplotlib.animation import FuncAnimation
 from scipy.signal import fftconvolve
 
 # === Physical parameters ===
-wavelength = 500  # nm, light wavelength
+wavelength = 100  # nm, light wavelength
 NA = 1.4          # numerical aperture of objective
 refractive_index = 1.33  # water immersion objective (for axial scaling)
 n_medium = refractive_index
@@ -16,12 +16,11 @@ X_start_nm, X_end_nm = 0, box_size_nm
 Y_start_nm, Y_end_nm = 0, box_size_nm
 Z_start_nm, Z_end_nm = 0, box_size_nm
 
-
 # === Simulation parameters ===
-number_of_particles = 3
-timesteps = 10000
+number_of_particles = 10
+timesteps = 1000
 dt = 0.01  # time step, arbitrary units
-diffusion_coefficient = 0.01  # arbitrary units
+diffusion_coefficient = 20 # arbitrary units
 
 # Spatial grid parameters
 grid_size = 100  # pixels per axis
@@ -40,10 +39,12 @@ X, Y = np.meshgrid(x, y)
 z_focus_nm = box_size_nm / 2  # focal plane at center, 500 nm
 
 # Approximate lateral resolution (diffraction limited)
-lateral_resolution_nm = 0.21 * wavelength / NA  # sigma0 in nm
+lateral_resolution_nm = 0.4 * wavelength / NA  # sigma0 in nm
 
 # Compute sigma0 in pixels
 sigma0_pix = lateral_resolution_nm / pixel_size_nm
+
+sigma0_pix /= 2
 
 # Rayleigh range z_R = (pi * n * sigma0^2) / wavelength
 z_R_nm = np.pi * n_medium * lateral_resolution_nm**2 / wavelength
@@ -64,29 +65,29 @@ for i in range(number_of_particles):
     positions[i, 1, 0] = np.random.uniform(0, box_size_nm)
     positions[i, 2, 0] = np.random.uniform(0, box_size_nm)
 
+# Overwrite z-coordinate to keep the first particle at z = 500 nm (focal plane)
+positions[0, 2, :] = z_focus_nm
+
 # Simulate Brownian motion with reflection at boundaries
 for t in range(1, timesteps + 1):
     steps = np.sqrt(2 * diffusion_coefficient * dt) * np.random.randn(number_of_particles, 3)
-    positions[:, :, t] = positions[:, :, t-1] + steps * (box_size_nm * 0.001)  # scaled step size in nm
+    positions[:, :, t] = positions[:, :, t-1] + steps   # scaled step size in nm
 
     # Reflect at boundaries
     for dim in range(3):
         min_bound = [X_start_nm, Y_start_nm, Z_start_nm][dim]
         max_bound = [X_end_nm, Y_end_nm, Z_end_nm][dim]
-
-        # Reflect lower boundary
         positions[:, dim, t] = np.where(
             positions[:, dim, t] < min_bound,
             2 * min_bound - positions[:, dim, t],
             positions[:, dim, t]
         )
-
-        # Reflect upper boundary
         positions[:, dim, t] = np.where(
             positions[:, dim, t] > max_bound,
             2 * max_bound - positions[:, dim, t],
             positions[:, dim, t]
         )
+
 # Gaussian PSF generator
 def gaussian_2d(size, sigma):
     center = size // 2
@@ -99,14 +100,44 @@ def gaussian_2d(size, sigma):
 # Enhanced sigma calculation including particle size contribution
 def sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm, d_nm, pixel_size_nm):
     dz = z_nm - z_focus_nm
-
-    # PSF broadening due to defocus
     sigma_psf = sigma0_pix * np.sqrt(1 + (dz / z_R_nm) ** 2)
-
-    # Particle physical size contribution
     sigma_par = (d_nm / (2 * np.sqrt(2 * np.log(2)))) / pixel_size_nm
-
     return sigma_psf + sigma_par
+
+# --- Precompute global max intensity for normalization ---
+print("Precomputing global maximum intensity for normalization...")
+global_max = 0
+for frame in range(timesteps + 1):
+    img = np.zeros((grid_size, grid_size))
+    for i in range(number_of_particles):
+        x_nm, y_nm, z_nm = positions[i, :, frame]
+        x_pixel = int((x_nm / box_size_nm) * grid_size)
+        y_pixel = int((y_nm / box_size_nm) * grid_size)
+        sigma_pix = sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm, protein_diameter_nm, pixel_size_nm)
+        psf_size = max(7, int(6 * sigma_pix))
+        if psf_size % 2 == 0:
+            psf_size += 1
+        psf = gaussian_2d(psf_size, sigma_pix)
+        convolved = fftconvolve(psf, protein_mask, mode='same')
+        half = convolved.shape[0] // 2
+        x_start = max(0, x_pixel - half)
+        x_end = min(grid_size, x_pixel + half + 1)
+        y_start = max(0, y_pixel - half)
+        y_end = min(grid_size, y_pixel + half + 1)
+        cx_start = half - (x_pixel - x_start)
+        cx_end = half + (x_end - x_pixel)
+        cy_start = half - (y_pixel - y_start)
+        cy_end = half + (y_end - y_pixel)
+        depth = abs(z_nm - z_focus_nm)
+        intensity = 1 / (1 + (depth / (box_size_nm / 2))**2)
+        img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
+    expected_photons_per_frame = 2000
+    scaled_img = img * expected_photons_per_frame
+    noisy_img = np.random.poisson(scaled_img).astype(float)
+    frame_max = noisy_img.max()
+    if frame_max > global_max:
+        global_max = frame_max
+print(f"Global maximum intensity: {global_max}")
 
 # Setup plot
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -120,7 +151,7 @@ psf_img = ax.imshow(
 )
 ax.set_xlabel('X (nm)')
 ax.set_ylabel('Y (nm)')
-ax.set_title('Convolved Protein Imaging with Depth-Dependent PSF')
+title_text = ax.set_title('Convolved Protein Imaging with Depth-Dependent PSF')
 
 def update(frame):
     img = np.zeros((grid_size, grid_size))
@@ -128,48 +159,34 @@ def update(frame):
         x_nm, y_nm, z_nm = positions[i, :, frame]
         x_pixel = int((x_nm / box_size_nm) * grid_size)
         y_pixel = int((y_nm / box_size_nm) * grid_size)
-
         sigma_pix = sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm, protein_diameter_nm, pixel_size_nm)
-
         psf_size = max(7, int(6 * sigma_pix))
         if psf_size % 2 == 0:
             psf_size += 1
-
         psf = gaussian_2d(psf_size, sigma_pix)
         convolved = fftconvolve(psf, protein_mask, mode='same')
-
         half = convolved.shape[0] // 2
         x_start = max(0, x_pixel - half)
         x_end = min(grid_size, x_pixel + half + 1)
         y_start = max(0, y_pixel - half)
         y_end = min(grid_size, y_pixel + half + 1)
-
         cx_start = half - (x_pixel - x_start)
         cx_end = half + (x_end - x_pixel)
         cy_start = half - (y_pixel - y_start)
         cy_end = half + (y_end - y_pixel)
-
         depth = abs(z_nm - z_focus_nm)
-        intensity = 1 / (1 + depth / (box_size_nm / 2))
-
+        intensity = 1 / (1 + (depth / (box_size_nm / 2)))
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
-
-    if img.max() > 0:
-        img /= img.max()
-
     expected_photons_per_frame = 2000
     scaled_img = img * expected_photons_per_frame
     noisy_img = np.random.poisson(scaled_img).astype(float)
-
-    if noisy_img.max() > 0:
-        noisy_img /= noisy_img.max()
-
-    # --- Time scaling added here ---
+    # --- Global normalization ---
+    if global_max > 0:
+        noisy_img /= global_max
     current_time = frame * dt
-    title = ax.set_title(f"Convolved Protein Imaging\nTime = {current_time:.2f} units")
-    
+    title_text.set_text(f"Convolved Protein Imaging\nTime = {current_time:.2f} units")
     psf_img.set_data(noisy_img)
-    return [psf_img, title]
+    return [psf_img, title_text]
 
 ani = FuncAnimation(fig, update, frames=timesteps + 1, interval=20, blit=False)
 plt.colorbar(psf_img, label='Normalized Intensity')
