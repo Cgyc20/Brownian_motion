@@ -12,6 +12,11 @@ n_medium = refractive_index
 # Simulation box size in nanometers (1 unit = 1 micron = 1000 nm)
 box_size_nm = 1000  # simulation box 1 micron = 1000 nm per axis
 
+X_start_nm, X_end_nm = 0, box_size_nm
+Y_start_nm, Y_end_nm = 0, box_size_nm
+Z_start_nm, Z_end_nm = 0, box_size_nm
+
+
 # === Simulation parameters ===
 number_of_particles = 3
 timesteps = 1000
@@ -62,10 +67,26 @@ for i in range(number_of_particles):
 # Simulate Brownian motion with reflection at boundaries
 for t in range(1, timesteps + 1):
     steps = np.sqrt(2 * diffusion_coefficient * dt) * np.random.randn(number_of_particles, 3)
-    positions[:, :, t] = positions[:, :, t-1] + steps * (box_size_nm * 0.001)  # scale steps
-    for dim in range(3):
-        positions[:, dim, t] = np.clip(positions[:, dim, t], 0, box_size_nm * 1.0)
+    positions[:, :, t] = positions[:, :, t-1] + steps * (box_size_nm * 0.001)  # scaled step size in nm
 
+    # Reflect at boundaries
+    for dim in range(3):
+        min_bound = [X_start_nm, Y_start_nm, Z_start_nm][dim]
+        max_bound = [X_end_nm, Y_end_nm, Z_end_nm][dim]
+
+        # Reflect lower boundary
+        positions[:, dim, t] = np.where(
+            positions[:, dim, t] < min_bound,
+            2 * min_bound - positions[:, dim, t],
+            positions[:, dim, t]
+        )
+
+        # Reflect upper boundary
+        positions[:, dim, t] = np.where(
+            positions[:, dim, t] > max_bound,
+            2 * max_bound - positions[:, dim, t],
+            positions[:, dim, t]
+        )
 # Gaussian PSF generator
 def gaussian_2d(size, sigma):
     center = size // 2
@@ -136,7 +157,7 @@ def update(frame):
     if img.max() > 0:
         img /= img.max()
 
-    expected_photons_per_frame = 5
+    expected_photons_per_frame = 2000
     scaled_img = img * expected_photons_per_frame
     noisy_img = np.random.poisson(scaled_img).astype(float)
 
