@@ -19,9 +19,9 @@ Z_start_nm, Z_end_nm = 0, box_size_nm
 
 # === Simulation parameters ===
 number_of_particles = 3
-timesteps = 1000
+timesteps = 10000
 dt = 0.01  # time step, arbitrary units
-diffusion_coefficient = 0.001  # arbitrary units
+diffusion_coefficient = 0.01  # arbitrary units
 
 # Spatial grid parameters
 grid_size = 100  # pixels per axis
@@ -150,7 +150,7 @@ def update(frame):
         cy_end = half + (y_end - y_pixel)
 
         depth = abs(z_nm - z_focus_nm)
-        intensity = 1 / (1 + depth / (box_size_nm / 2))  # normalize depth decay
+        intensity = 1 / (1 + depth / (box_size_nm / 2))
 
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
 
@@ -164,10 +164,14 @@ def update(frame):
     if noisy_img.max() > 0:
         noisy_img /= noisy_img.max()
 
+    # --- Time scaling added here ---
+    current_time = frame * dt
+    title = ax.set_title(f"Convolved Protein Imaging\nTime = {current_time:.2f} units")
+    
     psf_img.set_data(noisy_img)
-    return [psf_img]
+    return [psf_img, title]
 
-ani = FuncAnimation(fig, update, frames=timesteps + 1, interval=20, blit=True)
+ani = FuncAnimation(fig, update, frames=timesteps + 1, interval=20, blit=False)
 plt.colorbar(psf_img, label='Normalized Intensity')
 plt.tight_layout()
 plt.show()
