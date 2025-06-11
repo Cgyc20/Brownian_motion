@@ -24,29 +24,23 @@ pixel_size_nm = box_size_nm / grid_size  # nm per pixel
 
 # Protein physical size
 protein_diameter_nm = 4  # 4 nm diameter protein
-
-# Protein size in pixels:
-protein_diameter_pix = 4
+protein_diameter_pix = 4  # in pixels (used for mask size)
 
 # Grid coordinates in nanometers
-X_start_nm, X_end_nm = 0, box_size_nm
-Y_start_nm, Y_end_nm = 0, box_size_nm
-Z_start_nm, Z_end_nm = 0, box_size_nm
-
-x = np.linspace(X_start_nm, X_end_nm, grid_size)
-y = np.linspace(Y_start_nm, Y_end_nm, grid_size)
+x = np.linspace(0, box_size_nm, grid_size)
+y = np.linspace(0, box_size_nm, grid_size)
 X, Y = np.meshgrid(x, y)
 
 # Focal plane z (axial focus position in nm)
 z_focus_nm = box_size_nm / 2  # focal plane at center, 500 nm
 
-# Rayleigh range (depth of focus), simplified
-# Rayleigh range z_R = (pi * n * w0^2) / wavelength
-# w0 (beam waist) ~ sigma0 = lateral resolution
-# Approximate lateral resolution (diffraction limited):
-lateral_resolution_nm = 0.21 * wavelength / NA  # sigma0
+# Approximate lateral resolution (diffraction limited)
+lateral_resolution_nm = 0.21 * wavelength / NA  # sigma0 in nm
 
-# Rayleigh range axial depth scale (approximate)
+# Compute sigma0 in pixels
+sigma0_pix = lateral_resolution_nm / pixel_size_nm
+
+# Rayleigh range z_R = (pi * n * sigma0^2) / wavelength
 z_R_nm = np.pi * n_medium * lateral_resolution_nm**2 / wavelength
 
 # --- Protein mask generation ---
@@ -61,28 +55,16 @@ protein_mask = circular_protein_mask(protein_diameter_pix)
 # Initialize particle positions (in nm)
 positions = np.zeros((number_of_particles, 3, timesteps + 1))
 for i in range(number_of_particles):
-    positions[i, 0, 0] = np.random.uniform(X_start_nm, X_end_nm)
-    positions[i, 1, 0] = np.random.uniform(Y_start_nm, Y_end_nm)
-    positions[i, 2, 0] = np.random.uniform(Z_start_nm, Z_end_nm)
+    positions[i, 0, 0] = np.random.uniform(0, box_size_nm)
+    positions[i, 1, 0] = np.random.uniform(0, box_size_nm)
+    positions[i, 2, 0] = np.random.uniform(0, box_size_nm)
 
 # Simulate Brownian motion with reflection at boundaries
 for t in range(1, timesteps + 1):
     steps = np.sqrt(2 * diffusion_coefficient * dt) * np.random.randn(number_of_particles, 3)
-    positions[:, :, t] = positions[:, :, t-1] + steps * (box_size_nm * 0.001)  # scaled step size in nm
-    # Reflect at boundaries
+    positions[:, :, t] = positions[:, :, t-1] + steps * (box_size_nm * 0.001)  # scale steps
     for dim in range(3):
-        min_bound = [X_start_nm, Y_start_nm, Z_start_nm][dim]
-        max_bound = [X_end_nm, Y_end_nm, Z_end_nm][dim]
-        positions[:, dim, t] = np.where(
-            positions[:, dim, t] < min_bound,
-            2 * min_bound - positions[:, dim, t],
-            positions[:, dim, t]
-        )
-        positions[:, dim, t] = np.where(
-            positions[:, dim, t] > max_bound,
-            2 * max_bound - positions[:, dim, t],
-            positions[:, dim, t]
-        )
+        positions[:, dim, t] = np.clip(positions[:, dim, t], 0, box_size_nm * 1.0)
 
 # Gaussian PSF generator
 def gaussian_2d(size, sigma):
@@ -93,20 +75,23 @@ def gaussian_2d(size, sigma):
     g = np.exp(-(X_**2 + Y_**2) / (2 * sigma**2))
     return g / g.sum()
 
-# Axial-dependent PSF sigma (in pixels). THis uses the Rayleigh
-def sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm):
+# Enhanced sigma calculation including particle size contribution
+def sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm, d_nm, pixel_size_nm):
     dz = z_nm - z_focus_nm
-    sigma = sigma0_pix * np.sqrt(1 + (dz / z_R_nm)**2)
-    return sigma
 
-# Compute sigma0 in pixels from lateral_resolution_nm and pixel_size_nm
-sigma0_pix = lateral_resolution_nm / pixel_size_nm
+    # PSF broadening due to defocus
+    sigma_psf = sigma0_pix * np.sqrt(1 + (dz / z_R_nm) ** 2)
+
+    # Particle physical size contribution
+    sigma_par = (d_nm / (2 * np.sqrt(2 * np.log(2)))) / pixel_size_nm
+
+    return sigma_psf + sigma_par
 
 # Setup plot
 fig, ax = plt.subplots(figsize=(8, 6))
 psf_img = ax.imshow(
     np.zeros((grid_size, grid_size)),
-    extent=[X_start_nm, X_end_nm, Y_start_nm, Y_end_nm],
+    extent=[0, box_size_nm, 0, box_size_nm],
     origin='lower',
     cmap='hot',
     vmin=0,
@@ -120,13 +105,14 @@ def update(frame):
     img = np.zeros((grid_size, grid_size))
     for i in range(number_of_particles):
         x_nm, y_nm, z_nm = positions[i, :, frame]
-        x_pixel = int((x_nm - X_start_nm) / (X_end_nm - X_start_nm) * grid_size)
-        y_pixel = int((y_nm - Y_start_nm) / (Y_end_nm - Y_start_nm) * grid_size)
+        x_pixel = int((x_nm / box_size_nm) * grid_size)
+        y_pixel = int((y_nm / box_size_nm) * grid_size)
 
-        sigma_pix = sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm)
+        sigma_pix = sigma_from_z(z_nm, z_focus_nm, sigma0_pix, z_R_nm, protein_diameter_nm, pixel_size_nm)
+
         psf_size = max(7, int(6 * sigma_pix))
         if psf_size % 2 == 0:
-            psf_size += 1  # odd size for symmetry
+            psf_size += 1
 
         psf = gaussian_2d(psf_size, sigma_pix)
         convolved = fftconvolve(psf, protein_mask, mode='same')
@@ -142,8 +128,7 @@ def update(frame):
         cy_start = half - (y_pixel - y_start)
         cy_end = half + (y_end - y_pixel)
 
-        # Intensity falloff with axial distance, softer decay
-        depth = np.abs(z_nm - z_focus_nm)
+        depth = abs(z_nm - z_focus_nm)
         intensity = 1 / (1 + depth / (box_size_nm / 2))  # normalize depth decay
 
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
