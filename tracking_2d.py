@@ -1,11 +1,8 @@
 import numpy as np
-from particles import FeynmanKac
 import particles
-from scipy.stats import multivariate_normal
-import scipy.special
 import matplotlib.pyplot as plt
 from particles.collectors import Moments
-from molecule_model import MoleculeBootstrapPF2D
+from molecule_model_2d import MoleculeBootstrapPF2D
 
 np.random.seed(3)
 
