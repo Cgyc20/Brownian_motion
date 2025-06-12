@@ -38,7 +38,7 @@ class MoleculeBootstrapPF2D(MoleculePF):
                                  size=(N, d))
         x_new = xp + noise
         return self.reflect(x_new)
-    
+
     def noise_distribution(self, x):
         pixel_edges = np.arange(self.box[0, 0], self.box[0, 1] + self.pixel_width, self.pixel_width)
         pixel_centers = 0.5 * (pixel_edges[:-1] + pixel_edges[1:])
@@ -50,7 +50,7 @@ class MoleculeBootstrapPF2D(MoleculePF):
                 np.exp(-0.5 * ((pixel_centers - mu) ** 2) / denom))
         gauss = gauss / sum(gauss[:-1])
         return gauss
-    
+
     def evaluate_noise_pdf(self, x, data):
         # Avoid log(0) issues
         noise_dist = self.noise_distribution(x=x)
@@ -62,7 +62,7 @@ class MoleculeBootstrapPF2D(MoleculePF):
         log_prob = np.sum(data * np.log(probs))
         log_likelihood = log_coef + log_prob
         return log_likelihood
-    
+
     def sample_noise(self, x):
         gauss = self.noise_distribution(x=x)
         y = np.random.multinomial(self.multinom_samples, gauss)

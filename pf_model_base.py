@@ -14,14 +14,6 @@ class MoleculePF(ABC, FeynmanKac):
         pass
 
     @abstractmethod
-    def logG(self, t, xp, x):
-        pass
-
-    @abstractmethod
-    def generate_observations(self):
-        pass
-
-    @abstractmethod
     def noise_distribution(self, x):
         pass
 
@@ -30,7 +22,7 @@ class MoleculePF(ABC, FeynmanKac):
         pass
 
     @abstractmethod
-    def evaluate_noise_pdf(self):
+    def evaluate_noise_pdf(self, x, data):
         pass
 
     def gen_path(self):
