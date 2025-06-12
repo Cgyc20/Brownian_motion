@@ -27,12 +27,47 @@ def switching(num_particles, init_state, switch_rates, timesteps, dt):
 
     #iterate over timesteps to get the state of each particle
     for i in range(timesteps):
-        for j in range(num_particles):  
-            if states[i, j] == 0:
+        for j in range(num_particles):
+            #Full state
+            if states[j, i] == 0:
                 #generate random number
                 r = np.random.rand()
                 #Switch to quenched state
                 if r < full_rate:
                     states[j, i+1] = 1
                 #Switch to half state
-                
+                elif r < full_rate + half_rateF:
+                    states[j, i+1] = 2
+                else:
+                    states[j, i+1] = 0
+            
+            #Quenched state
+            if states[j, i] == 1:
+                #generate random number
+                r = np.random.rand()
+                #Switch to full state
+                if r < quenched_rate:
+                    states[j, i+1] = 0
+                #Switch to half state
+                elif r < quenched_rate + half_rateQ:
+                    states[j, i+1] = 2
+                else:
+                    states[j, i+1] = 1
+            
+            #Half state
+            if states[j, i] == 2:
+                #generate random number
+                r = np.random.rand()
+                #Switch to zero state
+                if r < zero_rate:
+                    states[j, i+1] = 3
+                else:
+                    states[j, i+1] = 2
+            #Can't leave zero state
+            if states[j, i] == 3:
+                states[j, i+1] = 3
+            
+    return states
+
+
+        
