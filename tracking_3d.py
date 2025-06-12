@@ -13,7 +13,7 @@ init_cov = 0.01 * np.eye(3)
 box = np.array([[0.0, 1.], [0.0, 1.], [0.01, 1.01]])
 pixel_width = 0.01
 T = 30
-multinom_samples = 100000
+multinom_samples = 1000
 
 state_space_model = MoleculeBootstrapPF3D(init_mean=init_mean,
                                          init_cov=init_cov,
@@ -34,7 +34,7 @@ ax.set_ylim(box[1])
 ax.set_zlim(box[2])
 ax.set_title("True molecule trajectory")
 plt.grid(True)
-#plt.savefig('true_trajectory_3d.pdf', bbox_inches='tight')
+#plt.savefig('true_trajectory_3d_bad.pdf', bbox_inches='tight')
 plt.show()
 
 observed_data = state_space_model.generate_observations(path=true_path)
@@ -47,7 +47,7 @@ plt.title(f'Observed Data at t = {t}')
 plt.xlabel('Pixel X')
 plt.ylabel('Pixel Y')
 plt.colorbar(label='Intensity')
-#plt.savefig('observed_data_3d.pdf', bbox_inches='tight')
+#plt.savefig('observed_data_3d_bad.pdf', bbox_inches='tight')
 plt.show()
 
 state_space_model.data = observed_data
@@ -73,7 +73,7 @@ ax.set_zlim(box[2])
 ax.set_title("True vs Inferred Molecule Trajectory")
 ax.legend()
 plt.grid(True)
-#plt.savefig('inferred_comparison_3d.pdf', bbox_inches='tight')
+#plt.savefig('inferred_comparison_3d_bad.pdf', bbox_inches='tight')
 plt.show()
 
 #Plot paths in 2D projection (x,y)
@@ -87,5 +87,5 @@ ax.set_ylim(box[1])
 ax.set_title("True vs Inferred Molecule Trajectory (2D Projection)")
 ax.legend()
 plt.grid(True)
-#plt.savefig('inferred_comparison_2d.pdf', bbox_inches='tight')
+#plt.savefig('inferred_comparison_2d_bad.pdf', bbox_inches='tight')
 plt.show()
