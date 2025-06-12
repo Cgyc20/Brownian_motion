@@ -21,7 +21,7 @@ Z_start_nm, Z_end_nm = 0, box_size_nm
 number_of_particles = 10
 timesteps = 1000
 dt = 0.1  # time step, arbitrary units
-diffusion_coefficient = 10 # arbitrary units
+diffusion_coefficient = 100 # arbitrary units
 
 # Spatial grid parameters
 grid_size = 100  # pixels per axis
@@ -70,7 +70,7 @@ init_state = np.ones(number_of_particles)
 #Run Gillespie algorithm to simulate switching between light states
 t_after = 0
 t_now = 0
-switch_rate = 5 # switching rate
+switch_rate = 0.1 # switching rate
 propensity = switch_rate*number_of_particles
 
 light_now = np.copy(init_state)
@@ -89,7 +89,7 @@ while t_now < timesteps * dt:
     particle_index = np.random.randint(0, number_of_particles)
     if light_now[particle_index] == 1:
         # If the particle is high intensity, quench
-        light_now[particle_index] = 0
+        light_now[particle_index] = 0.2
     else:
         # If the particle is quenched, switch to high intensity
         light_now[particle_index] = 1
@@ -219,8 +219,8 @@ def update(frame):
         cy_start = half - (y_pixel - y_start)
         cy_end = half + (y_end - y_pixel)
         depth = abs(z_nm - z_focus_nm)
-        intensity = 1 / (1 + (depth / (box_size_nm / 2)))
-        img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
+        intensity = (1 * light_state[i, frame]) / (1 + (depth / (box_size_nm / 2)))
+        img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end] 
     expected_photons_per_frame = 1000
     scaled_img = img * expected_photons_per_frame
     noisy_img = np.random.poisson(scaled_img).astype(float)
