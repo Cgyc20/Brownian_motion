@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.signal import fftconvolve
-
+import matplotlib.colors as mcolors
 # === Physical parameters ===
 wavelength = 100  # nm, light wavelength
 NA = 1.4          # numerical aperture of objective
@@ -26,6 +26,10 @@ diffusion_coefficient = 100 # arbitrary units
 grid_size = 100  # pixels per axis
 pixel_size_nm = box_size_nm / grid_size  # nm per pixel
 
+
+
+switch_rates = [0.05 , 0.05, 0.025, 0.025, 0.07] #F -> Q, Q -> F, F -> H, Q -> H, H -> Z
+relative_intensity_rate = [1, 0.2, 0.5, 0] #Relative intensity of F, Q, H, Z states
 # Protein physical size
 protein_diameter_nm = 4  # 4 nm diameter protein
 protein_diameter_pix = 1  # in pixels (used for mask size)
@@ -33,6 +37,8 @@ protein_diameter_pix = 1  # in pixels (used for mask size)
 # Grid coordinates in nanometers
 x = np.linspace(0, box_size_nm, grid_size)
 y = np.linspace(0, box_size_nm, grid_size)
+states = np.zeros((number_of_particles, timesteps+1),dtype = int) #Define at zero
+
 X, Y = np.meshgrid(x, y)
 
 # Focal plane z (axial focus position in nm)
@@ -65,6 +71,7 @@ for i in range(number_of_particles):
     positions[i, 1, 0] = np.random.uniform(0, box_size_nm)
     positions[i, 2, 0] = np.random.uniform(0, box_size_nm)
 
+
 # Overwrite z-coordinate to keep the first particle at z = 500 nm (focal plane)
 positions[0, 2, :] = 500
 
@@ -79,7 +86,79 @@ for t in range(1, timesteps + 1):
     positions[:, 0, t] = np.where(positions[:, 0, t] > X_end_nm, X_end_nm - (positions[:, 0, t] - X_end_nm), positions[:, 0, t])
     positions[:, 1, t] = np.where(positions[:, 1, t] > Y_end_nm, Y_end_nm - (positions[:, 1, t] - Y_end_nm), positions[:, 1, t])
 
+#Ranging over the states (Quenched, unquenched, First bleaching, second bleaching)
+def switching(num_particles, init_state, switch_rates, timesteps, dt):
+    """
+    Simulates the switching of particles between four states: full, quenched, half, and 
+    zero over a number of timesteps."""
+    # Parameters:
+    # num_particles: Number of particles in the system
+    # init_state: Initial state of the particles (array of size num_particles)
+    # 0: F, 1 Q, 2: H, 3: Z
+    # switch_rates: Array of rates for switching between states [full_rate, quenched_rate, half_rate, zero_rate]
+    # timesteps: Number of timesteps to simulate
+    #dt: time step size
 
+    #Get information from the input parameters
+    init = np.copy(init_state)
+    full_rate = switch_rates[0]*dt #F -> Q
+    quenched_rate = switch_rates[1]*dt #Q -> F
+    half_rateF = switch_rates[2]*dt #F -> H
+    half_rateQ = switch_rates[3]*dt #Q -> H
+    zero_rate = switch_rates[4]*dt #H -> Z
+
+    # Initialise arrays to store the state of particles at each timestep
+    states = np.zeros((num_particles, timesteps+1))
+    states[:, 0] = init
+
+    #iterate over timesteps to get the state of each particle
+    for i in range(timesteps):
+        for j in range(num_particles):
+            #Full state
+            if states[j, i] == 0:
+                #generate random number
+                r = np.random.rand()
+                #Switch to quenched state
+                if r < full_rate:
+                    states[j, i+1] = 1
+                #Switch to half state
+                elif r < full_rate + half_rateF:
+                    states[j, i+1] = 2
+                else:
+                    states[j, i+1] = 0
+            
+            #Quenched state
+            if states[j, i] == 1:
+                #generate random number
+                r = np.random.rand()
+                #Switch to full state
+                if r < quenched_rate:
+                    states[j, i+1] = 0
+                #Switch to half state
+                elif r < quenched_rate + half_rateQ:
+                    states[j, i+1] = 2
+                else:
+                    states[j, i+1] = 1
+            
+            #Half state
+            if states[j, i] == 2:
+                #generate random number
+                r = np.random.rand()
+                #Switch to zero state
+                if r < zero_rate:
+                    states[j, i+1] = 3
+                else:
+                    states[j, i+1] = 2
+            #Can't leave zero state
+            if states[j, i] == 3:
+                states[j, i+1] = 3
+            
+    return states
+
+init_state = np.zeros(number_of_particles,dtype = int)
+states = switching(num_particles=number_of_particles, init_state=init_state, switch_rates=switch_rates, timesteps=timesteps, dt = dt)
+
+print(states)
 # Gaussian PSF generator
 def gaussian_2d(size, sigma):
     ##The size is just how much we are plotting! 3 standard deviations from the centre are 99% of all data
@@ -133,15 +212,16 @@ for frame in range(timesteps + 1):
 print(f"Global maximum intensity: {global_max}")
 
 # Setup plot
+norm = mcolors.PowerNorm(gamma=0.5, vmin=0, vmax=1)
 fig, ax = plt.subplots(figsize=(8, 6))
 psf_img = ax.imshow(
     np.zeros((grid_size, grid_size)),
     extent=[0, box_size_nm, 0, box_size_nm],
     origin='lower',
     cmap='hot',
-    vmin=0,
-    vmax=1
+    norm=norm
 )
+ax.set_xlabel('X (nm)')
 ax.set_xlabel('X (nm)')
 ax.set_ylabel('Y (nm)')
 title_text = ax.set_title('Convolved Protein Imaging with Depth-Dependent PSF')
@@ -149,6 +229,13 @@ title_text = ax.set_title('Convolved Protein Imaging with Depth-Dependent PSF')
 def update(frame):
     img = np.zeros((grid_size, grid_size))
     for i in range(number_of_particles):
+
+        
+        
+        relative_intensity_current = relative_intensity_rate[int(states[i, frame])]
+
+
+        print(relative_intensity_current)
         x_nm, y_nm, z_nm = positions[i, :, frame]
         x_pixel = int((x_nm / box_size_nm) * grid_size)
         y_pixel = int((y_nm / box_size_nm) * grid_size)
@@ -168,7 +255,8 @@ def update(frame):
         cy_start = half - (y_pixel - y_start)
         cy_end = half + (y_end - y_pixel)
         depth = abs(z_nm - z_focus_nm)
-        intensity = 1 / (1 + (depth / (box_size_nm / 2)))
+        intensity = relative_intensity_current/ (1 + (depth / (box_size_nm / 2)))
+        
         img[y_start:y_end, x_start:x_end] += intensity * convolved[cy_start:cy_end, cx_start:cx_end]
     expected_photons_per_frame = 10000
     scaled_img = img * expected_photons_per_frame
