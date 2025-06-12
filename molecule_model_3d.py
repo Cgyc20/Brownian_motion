@@ -40,8 +40,7 @@ class MoleculeBootstrapPF3D(MoleculePF):
         return self.reflect(x_new)
     
     def noise_distribution(self, x):   
-        mu, scale = x
-        mu_x, mu_y = mu
+        mu_x, mu_y, scale = x
         denom = scale**2
 
         #Pixel edges and centers for x and y
@@ -76,6 +75,12 @@ class MoleculeBootstrapPF3D(MoleculePF):
         return log_likelihood
     
     def sample_noise(self, x):
-        gauss = self.noise_distribution(x=x)
-        y = np.random.multinomial(self.multinom_samples, gauss)
+        gauss = self.noise_distribution(x=x)  # shape: (H, W)
+        gauss_flat = gauss.ravel()  # shape: (H*W,)
+
+        # Draw samples
+        y_flat = np.random.multinomial(self.multinom_samples, gauss_flat)
+
+        # Reshape back to 2D
+        y = y_flat.reshape(gauss.shape)  # shape: (H, W)
         return y
