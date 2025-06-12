@@ -34,7 +34,7 @@ class SimulationParameters:
     refractive_index: float = 1.33  # water immersion
     
     # Simulation box
-    box_size_nm: float = 1000.0  # 1 micron
+    box_size_nm: float = 1024  # 1 micron
     
     # Particle dynamics
     number_of_particles: int = 10
@@ -49,7 +49,7 @@ class SimulationParameters:
     switch_rates: List[float] = None  # Will be set in __post_init__
     relative_intensities: List[float] = None  # Will be set in __post_init__
     protein_diameter_nm: float = 4.0
-    expected_photons: int = 10000
+    expected_photons: int = 100
     
 
     def __post_init__(self):
@@ -219,7 +219,7 @@ class FluorescenceMicroscopySimulator:
         psf /= psf.sum()
         return psf
 
-    def render_frame(self, t: int, add_noise: bool = True) -> np.ndarray:
+    def render_frame(self, t: int, add_noise: bool = True, background_level: float = 0.001) -> np.ndarray:
         image = np.zeros((self.params.grid_size, self.params.grid_size), dtype=float)
         for i in range(self.params.number_of_particles):
             state = self.states[i, t]
@@ -228,10 +228,9 @@ class FluorescenceMicroscopySimulator:
             intensity = self.params.relative_intensities[state]
             x, y, z = self.positions[i, :, t]
             psf = self.psf(x, y, z)
-            particle_brightness = intensity * self.params.expected_photons
-            # print(f"Frame {t}, Particle {i}, State {state}, Intensity {intensity}, Brightness {particle_brightness}")
             image += intensity * psf
-        image *= self.params.expected_photons  # <-- Only scale, don't normalize by sum
+        image *= self.params.expected_photons
+        image += background_level  # Add constant background before noise
         if add_noise:
             image = np.random.poisson(image).astype(float)
         return image
@@ -395,7 +394,7 @@ class FluorescenceMicroscopySimulator:
     
         # Prepare image animation
         first_img = self.render_frame(0, add_noise=True)
-        vmax = 200
+        vmax = 3
     
         im = ax_img.imshow(
             first_img,
@@ -511,13 +510,13 @@ if __name__ == "__main__":
         numerical_aperture=1.4,
         refractive_index=1.33,
         box_size_nm=1000.0,
-        number_of_particles=100,
+        number_of_particles=10,
         total_time=30.0,  # Use total_time instead of timesteps
         dt=0.1,
         diffusion_coefficient=50.0,
         grid_size=100,
         protein_diameter_nm=4.0,
-        expected_photons=10000,
+        expected_photons=200,
         switch_rates=[0.2, 0.2, 0.05, 0.05, 0.2],  # F→Q, Q→F, F→H, Q→H, H→Z
         relative_intensities=[1, 0.1, 0.5, 0.0]       # F, Q, H, Z
     )
