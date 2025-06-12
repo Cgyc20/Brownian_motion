@@ -2,7 +2,7 @@ import numpy as np
 import particles
 import matplotlib.pyplot as plt
 from particles.collectors import Moments
-from molecule_model_2d import MoleculeBootstrapPF2D
+from molecule_model_3d import MoleculeBootstrapPF2D
 
 np.random.seed(3)
 
