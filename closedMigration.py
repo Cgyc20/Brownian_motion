@@ -18,11 +18,11 @@ def switching(num_particles, init_state, switch_rates, timesteps, dt):
     full_rate = switch_rates[0]*dt #F -> Q
     quenched_rate = switch_rates[1]*dt #Q -> F
     half_rateF = switch_rates[2]*dt #F -> H
-    half_rateQ = switch_rates[2]*dt #Q -> H
-    zero_rate = switch_rates[3]*dt #H -> Z
+    half_rateQ = switch_rates[3]*dt #Q -> H
+    zero_rate = switch_rates[4]*dt #H -> Z
 
     # Initialise arrays to store the state of particles at each timestep
-    states = np.zeros((num_particles, timesteps))
+    states = np.zeros((num_particles, timesteps+1))
     states[:, 0] = init
 
     #iterate over timesteps to get the state of each particle
@@ -69,5 +69,22 @@ def switching(num_particles, init_state, switch_rates, timesteps, dt):
             
     return states
 
+#Example usage 
+num = 10
+init = np.zeros(num)  # All particles start in the full state
+switch_rates = [0.5, 0.5, 0.25, 0.25, 0.7]  # Example switch rates for F->Q, Q->F, F->H, H->Z
+time_steps = 100
+dt = 0.1
 
-        
+example_states = switching(num, init, switch_rates, time_steps, dt)
+times = np.linspace(0, time_steps * dt, time_steps + 1)
+# Plotting the states of a particle over time
+plt.figure(figsize=(12, 6))
+state_labels = ['Full', 'Quenched', 'Half', 'Zero']
+plt.step(times, example_states[1], where='post', label='Particle 1', linewidth=2)
+plt.yticks(ticks=np.arange(4), labels=state_labels)
+plt.xlabel('Time')
+plt.ylabel('State')
+plt.title('State of Each Particle Over Time')
+plt.legend()
+plt.show()
