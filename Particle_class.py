@@ -6,7 +6,7 @@ import matplotlib.colors as mcolors
 from typing import Tuple, Optional, List
 from dataclasses import dataclass
 import matplotlib.gridspec as gridspec
-
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 @dataclass
 class SimulationParameters:
@@ -113,7 +113,7 @@ class FluorescenceMicroscopySimulator:
             positions[i, 1, 0] = np.random.uniform(0, params.box_size_nm)
             positions[i, 2, 0] = np.random.uniform(0, params.box_size_nm)
         
-        positions[0,2,0] = self.z_focus_nm
+        # positions[:,2,0] = 500
         #States are Full, quenches, half bleached and full bleached. 
         states = np.zeros((params.number_of_particles, params.timesteps + 1), dtype=int)
         states[:, 0] = 0
@@ -207,7 +207,9 @@ class FluorescenceMicroscopySimulator:
 
     def psf(self, x_nm: float, y_nm: float, z_nm: float) -> np.ndarray:
         dz = z_nm - self.z_focus_nm
-        sigma_z = self.sigma0_pix * np.sqrt(1 + (dz / self.z_R_nm) ** 2)
+        # Make the PSF less sensitive to z by increasing z_R_nm
+        z_R_effective = self.z_R_nm *2.5  # Increase this factor for even less falloff
+        sigma_z = self.sigma0_pix * np.sqrt(1 + (dz / z_R_effective) ** 2)
         x_pix = x_nm / self.pixel_size_nm
         y_pix = y_nm / self.pixel_size_nm
         Xc = self.X_grid / self.pixel_size_nm
@@ -226,7 +228,7 @@ class FluorescenceMicroscopySimulator:
             x, y, z = self.positions[i, :, t]
             psf = self.psf(x, y, z)
             particle_brightness = intensity * self.params.expected_photons
-            print(f"Frame {t}, Particle {i}, State {state}, Intensity {intensity}, Brightness {particle_brightness}")
+            # print(f"Frame {t}, Particle {i}, State {state}, Intensity {intensity}, Brightness {particle_brightness}")
             image += intensity * psf
         image *= self.params.expected_photons  # <-- Only scale, don't normalize by sum
         if add_noise:
@@ -362,18 +364,22 @@ class FluorescenceMicroscopySimulator:
         plt.show()
 
     def animate_with_trajectory(
-        self,
+          self,
         interval: int = 50,
         repeat: bool = False,
         particle_index: int = 0,
-        show_state_trace: bool = False
+        show_state_trace: bool = False,
+        n_trajectories: int = 1
     ) -> None:
         """
-        Animate the fluorescence simulation and the 3D trajectory of a particle side by side.
-        Optionally, also show the state trace as a third subplot.
+        Animate the fluorescence simulation and the 3D trajectory of up to N particles side by side.
+        Optionally, also show the state trace as a third subplot for the main particle_index.
+        The trajectory line color reflects the state (F, Q, H, Z) at each segment.
         """
-        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
+    
+        state_colors = {0: 'C0', 1: 'C1', 2: 'C2', 3: 'k'}  # F: blue, Q: orange, H: green, Z: black
+    
         if show_state_trace:
             fig = plt.figure(figsize=(16, 5))
             gs = gridspec.GridSpec(1, 3, width_ratios=[2, 1, 1])
@@ -385,11 +391,11 @@ class FluorescenceMicroscopySimulator:
             gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1])
             ax_img = fig.add_subplot(gs[0])
             ax_traj = fig.add_subplot(gs[1], projection='3d')
-
+    
         # Prepare image animation
         first_img = self.render_frame(0, add_noise=True)
         vmax = 200
-
+    
         im = ax_img.imshow(
             first_img,
             cmap='inferno',
@@ -404,24 +410,29 @@ class FluorescenceMicroscopySimulator:
         ax_img.set_title("Fluorescence Microscopy Simulation")
         ax_img.axis('off')
         fig.colorbar(im, ax=ax_img, fraction=0.046, pad=0.04)
-
-        # Prepare 3D trajectory plot
-        positions = self.positions[particle_index]
-        x = positions[0]
-        y = positions[1]
-        z = positions[2]
-        traj_line, = ax_traj.plot([], [], [], color='C1', lw=2, label='Trajectory')
+    
+        # Prepare 3D trajectory plot for up to n_trajectories particles
+        n_plot = min(n_trajectories, self.params.number_of_particles)
+        # For each particle, we will keep a list of line segments (one per state segment)
+        traj_lines = []
+        for i in range(n_plot):
+            # We'll create one line per state segment, but initialize with a single empty line
+            line, = ax_traj.plot([], [], [], color='C0', lw=2)
+            traj_lines.append([line])  # List of lists for each particle
+    
         ax_traj.set_xlabel("X (nm)")
         ax_traj.set_ylabel("Y (nm)")
         ax_traj.set_zlabel("Z (nm)")
-        ax_traj.set_title(f"3D Trajectory (Particle {particle_index})")
-        ax_traj.set_xlim(np.min(x), np.max(x))
-        ax_traj.set_ylim(np.min(y), np.max(y))
-        ax_traj.set_zlim(np.min(z), np.max(z))
-        ax_traj.legend()
+        ax_traj.set_title(f"3D Trajectories (up to {n_plot})")
+        all_x = self.positions[:n_plot, 0, :].flatten()
+        all_y = self.positions[:n_plot, 1, :].flatten()
+        all_z = self.positions[:n_plot, 2, :].flatten()
+        ax_traj.set_xlim(np.min(all_x), np.max(all_x))
+        ax_traj.set_ylim(np.min(all_y), np.max(all_y))
+        ax_traj.set_zlim(np.min(all_z), np.max(all_z))
         ax_traj.grid(True, linestyle='--', alpha=0.5)
-
-        # Prepare state trace if requested
+    
+        # Prepare state trace if requested (for particle_index only)
         if show_state_trace:
             timesteps = self.states.shape[1]
             time = np.arange(timesteps) * self.params.dt
@@ -435,30 +446,63 @@ class FluorescenceMicroscopySimulator:
             ax_trace.grid(True, axis='x', linestyle='--', alpha=0.5)
             ax_trace.set_xlim(time[0], time[-1])
             ax_trace.set_ylim(-0.5, 3.5)
-
+    
         def update(frame):
             # Update image
             img = self.render_frame(frame, add_noise=True)
             im.set_array(img)
             time_text.set_text(f"Time: {frame * self.params.dt:.2f}")
 
-            # Update 3D trajectory line
-            traj_line.set_data(x[:frame+1], y[:frame+1])
-            traj_line.set_3d_properties(z[:frame+1])
+            # Remove all previous lines from ax_traj
+            ax_traj.cla()
+            ax_traj.set_xlabel("X (nm)")
+            ax_traj.set_ylabel("Y (nm)")
+            ax_traj.set_zlabel("Z (nm)")
+            ax_traj.set_title(f"3D Trajectories (up to {n_plot})")
+            ax_traj.set_xlim(np.min(all_x), np.max(all_x))
+            ax_traj.set_ylim(np.min(all_y), np.max(all_y))
+            ax_traj.set_zlim(np.min(all_z), np.max(all_z))
+            ax_traj.grid(True, linestyle='--', alpha=0.5)
+            #ax_traj.view_init(elev=-90, azim=0)  # Look straight down the z-axis onto the x-y plane
 
-            artists = [im, time_text, traj_line]
+            # Draw colored segments for each trajectory up to current frame
+            for i in range(n_plot):
+                xs = self.positions[i, 0, :frame+1]
+                ys = self.positions[i, 1, :frame+1]
+                zs = self.positions[i, 2, :frame+1]
+                states = self.states[i, :frame+1]
+                # Find contiguous segments of the same state
+                if len(xs) < 2:
+                    continue
+                seg_start = 0
+                for j in range(1, len(xs)):
+                    if states[j] != states[seg_start] or j == len(xs)-1:
+                        seg_end = j if states[j] != states[seg_start] else j+1
+                        color = state_colors.get(states[seg_start], 'k')
+                        ax_traj.plot(xs[seg_start:seg_end], ys[seg_start:seg_end], zs[seg_start:seg_end], color=color, lw=2)
+                        seg_start = j
+            # Optionally, add a legend for the states
+            from matplotlib.lines import Line2D
+            legend_elements = [
+                Line2D([0], [0], color=state_colors[0], lw=2, label='F'),
+                Line2D([0], [0], color=state_colors[1], lw=2, label='Q'),
+                Line2D([0], [0], color=state_colors[2], lw=2, label='H'),
+                Line2D([0], [0], color=state_colors[3], lw=2, label='Z'),
+            ]
+            ax_traj.legend(handles=legend_elements, loc='upper right')
+
+            artists = [im, time_text]
             if show_state_trace:
-                marker.set_data([time[frame]], [self.states[particle_index, frame]])
+                marker.set_data([frame * self.params.dt], [self.states[particle_index, frame]])
                 artists.append(marker)
             return artists
-
+    
         anim = FuncAnimation(
             fig, update, frames=self.params.timesteps + 1,
             interval=interval, blit=False, repeat=repeat
         )
         plt.tight_layout()
         plt.show()
-
 if __name__ == "__main__":
     # Example usage: run and animate the simulation
     params = SimulationParameters(
@@ -466,23 +510,23 @@ if __name__ == "__main__":
         numerical_aperture=1.4,
         refractive_index=1.33,
         box_size_nm=1000.0,
-        number_of_particles=1,
+        number_of_particles=100,
         total_time=30.0,  # Use total_time instead of timesteps
         dt=0.1,
-        diffusion_coefficient=100.0,
+        diffusion_coefficient=50.0,
         grid_size=100,
         protein_diameter_nm=4.0,
         expected_photons=10000,
-        switch_rates=[0.2, 0.2, 0.0, 0.0, 0.0],  # F→Q, Q→F, F→H, Q→H, H→Z
+        switch_rates=[0.2, 0.2, 0.05, 0.05, 0.2],  # F→Q, Q→F, F→H, Q→H, H→Z
         relative_intensities=[1, 0.1, 0.5, 0.0]       # F, Q, H, Z
     )
     sim = FluorescenceMicroscopySimulator(params)
     # Plot switching state trace first
-    FluorescenceMicroscopySimulator.plot_switching_state_over_time(
-        sim.get_particle_states(), params.dt, particle_index=0
-    )
+    # FluorescenceMicroscopySimulator.plot_switching_state_over_time(
+    #     sim.get_particle_states(), params.dt, particle_index=0
+    # )
     # Then show the animation
     sim.animate_with_trajectory(
-        interval=100, repeat=True, particle_index=0, show_state_trace=True
+        interval=100, repeat=True, particle_index=0, show_state_trace=True, n_trajectories=params.number_of_particles
     )
     
