@@ -116,7 +116,8 @@ class FluorescenceMicroscopySimulator:
         # positions[:,2,0] = 500
         #States are Full, quenches, half bleached and full bleached. 
         states = np.zeros((params.number_of_particles, params.timesteps + 1), dtype=int)
-        states[:, 0] = 0
+        states[:params.number_of_particles//2, 0] = 0
+        states[params.number_of_particles//2:params.number_of_particles, 0] = 1
         return positions, states
 
     @staticmethod
